@@ -43,7 +43,8 @@ const EnumType = enum{
 };
 
 const MyError = error{
-  GenericError
+  GenericError,
+  OtherError,
 };
 
 fn foo2(v: i32) !i32 {
@@ -57,6 +58,11 @@ fn wrap_foo2(v: i32) void {
   } else |err| {
     std.debug.print("Error: {}\n", .{err});
   }
+}
+
+pub fn printer(value: *i32) void {
+  std.debug.print("Pointer: {}\n", .{value});
+  std.debug.print("Value: {}\n", .{value.*});
 }
 
 pub fn main() void {
@@ -109,6 +115,11 @@ pub fn main() void {
   // Control Flows: If, Switch(){}, While, Errors = Enums, can use if to check for errors
   wrap_foo2(42);
   wrap_foo2(47);
+
+  // Pointers
+  var val: i32 = 47;
+  printer(&val);
 }
+
 
 
