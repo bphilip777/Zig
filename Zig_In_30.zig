@@ -81,6 +81,28 @@ fn nullChoice(value: ?*i32) void {
   }
 }
 
+fn meta(x: anytype) @TypeOf(x) {
+  if (@TypeOf(x) == i64) {
+    return x + 2;
+  } else {
+    return 2 * x;
+  }
+}
+
+// Generics
+fn Vec2Of(comptime T: type) type {
+  return struct {
+    x: T,
+    y: T,
+  };
+}
+
+const V2i64 = Vec2Of(i64);
+const V2f64 = Vec2Of(f64);
+
+// Factory type
+const Gpa = std.heap.GeneralPurposeAllocator(.{});
+
 
 pub fn main() void {
   std.debug.print("Hello world!\n", .{});
@@ -156,4 +178,35 @@ pub fn main() void {
   nullChoice(vptr2);
   nullChoice(vptr3);
 
+  // Meta-programming
+  // Types = compile-time 
+  // Runtime code will work at compile time 
+  // Struct field evaluation is duck-typed = if it has all props of duck, then it's a duck, type of structure typing
+  // Static Type: Variable has types, values have types, variables cannot change type
+  // Dynamic Typing: Variables have no type, values have types, variables change type dynamically
+  var xx: i64 = 48;
+  var yy: i32 = 47;
+  std.debug.print("I64-foo: {}\n", .{meta(xx)});
+  std.debug.print("I32-foo: {}\n", .{meta(yy)});
+
+  // Generics
+  var vi = V2i64{.x=47, .y=47};
+  var vf = V2f64{.x=48.0, .y=48.0};
+  std.debug.print("I64 vec: {}\n", .{vi});
+  std.debug.print("F64 vec: {}\n", .{vf});
+
+
+  // Heap
+  // create allocator factory struct -> std.mem.Allocator -> use alloc/free + create/destroy -> deinit Allocator factory
+  var gpaH = Gpa{};
+  var gallocH = &gpaH.allocator;
+  defer _ = gpaH.deinit();
+  var sliceH = try gallocH.alloc(i32, 2);
+  var singleH = try gallocH.create(i32);
+  sliceH[0] = 47;
+  sliceH[1] = 48;
+  singleH.* = 49;
+
+  std.debug.print("Slice: [{}, {}]\n", .{sliceH[0], sliceH[1]});
+  std.debug.print("Single: {}\n", .{singleH.*});
 }
