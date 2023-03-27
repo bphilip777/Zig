@@ -187,8 +187,6 @@ test "Try" {
   try expect(v == 12); // never reached
 }
 
-
-
 // errdefer
 var problems: u32 = 98;
 fn failFnCounter() error{Oops}!void {
@@ -202,6 +200,55 @@ test "ErrDefer" {
     try expect(problems == 99);
     return;
   };
+}
+
+// Error unions can have errors sets inferred 
+fn createFile() !void {
+  return error.AccessDenied;
+}
+
+test "Inferred error set" {
+  const x: error{AccessDenied}!void = createFile();
+  _ = x catch {};
+}
+
+// Merge error sets
+test "Merging errors" {
+  const A = error{NotDir, PathNotFound};
+  const B = error{OutOfMemory, PathNotFound};
+  const C = A||B;
+  if C.OutOfMemory {
+    std.debug.print("Here");
+  } else if C.PathNotFound {
+    std.debug.print("Here");
+  } else if C.NotDir {
+    std.debug.print("here");
+  }
+}
+
+// Switch statements
+test "switches get bitches" {
+  var x: i8 = 10;
+  switch(x) {
+    -1...1 => {
+      x = -x;
+    },
+    10, 100 => {
+      x = @divExact(x, 10);
+    },
+    else => {},
+  }
+    try expect(x == 1);
+}
+
+test "Switch expression" {
+  var x: i8 = 10;
+  x = switch(x) {
+    -1...1 => -x,
+    10, 100 => @divExact(x, 10),
+    else => x,
+  };
+  try expect(x == 1);
 }
 
 pub fn main() void {
