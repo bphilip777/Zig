@@ -39,8 +39,25 @@ const LikeAnObject = struct{
 const EnumType = enum{
   EnumOne,
   EnumTwo,
-  EnumThree = 3,
+  // EnumThree = 3,
 };
+
+const MyError = error{
+  GenericError
+};
+
+fn foo2(v: i32) !i32 {
+  if (v == 42) return MyError.GenericError;
+  return v;
+}
+
+fn wrap_foo2(v: i32) void {
+  if (foo2(v)) |value| {
+    std.debug.print("Value: {}\n", .{value});
+  } else |err| {
+    std.debug.print("Error: {}\n", .{err});
+  }
+}
 
 pub fn main() void {
   std.debug.print("Hello world!\n", .{});
@@ -77,6 +94,21 @@ pub fn main() void {
   // Enums
   std.debug.print("One: {}\n", .{EnumType.EnumOne});
   std.debug.print("One: {}\n", .{EnumType.EnumTwo == .EnumTwo});
-  std.debug.print("One: {}\n", .{@enumToInt(EnumType.EnumThree) == 3});
+  // std.debug.print("One: {}\n", .{@enumToInt(EnumType.EnumThree) == 3});
+
+  var array: [3]u32 = [3]u32{47, 47, 47};
+  var slice = array[0..2];
+  var array2: [3]u32 = [_]u32{47,47,47};
+  
+  // var invalid = array[4];
+  std.debug.print("array[0]: {}\n", .{array[0]});
+  std.debug.print("array[0]: {}\n", .{array[0]});
+  std.debug.print("Slice Length: {}\n", .{slice.len});
+  std.debug.print("Array 2: {}\n", .{array2[0]});
+  
+  // Control Flows: If, Switch(){}, While, Errors = Enums, can use if to check for errors
+  wrap_foo2(42);
+  wrap_foo2(47);
 }
+
 
