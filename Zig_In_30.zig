@@ -65,6 +65,23 @@ pub fn printer(value: *i32) void {
   std.debug.print("Value: {}\n", .{value.*});
 }
 
+const MyStruct = struct {
+value: i32
+};
+
+pub fn printer2(s: *MyStruct) void {
+  std.debug.print("Value: {}\n", .{s.value});
+}
+
+fn nullChoice(value: ?*i32) void {
+  if (value) |v| {
+    std.debug.print("Value: {}\n", .{v.*});
+  } else {
+    std.debug.print("Null!\n", .{});
+  }
+}
+
+
 pub fn main() void {
   std.debug.print("Hello world!\n", .{});
   
@@ -119,7 +136,24 @@ pub fn main() void {
   // Pointers
   var val: i32 = 47;
   printer(&val);
+  // Ptrs must be aligned correctly w/ value it's pointing to
+  var mys = MyStruct{.value = 47};
+  printer2(&mys);
+
+  // Any value is nullable - unions of base type + null, unwrap w/ .?
+  var v4: i32 = 49;
+  var vptr: ?*i32 = &v4;
+  // var throwaway1: ?*i32 = null;
+  // var throwaway2: *i32 = null; // error: expectedd type i32, found null
+
+  // std.debug.print("Value: {}\n", .{vptr.*}); // Error: Attempt to deref non-ptr type
+  std.debug.print("Value: {}\n", .{vptr.?.*});
+
+  // Use ptrs from C ABI fn - auto converted to null, use if to unwrap
+  var v5: i32 = 48;
+  var vptr2: ?*i32 = &v5;
+  var vptr3: ?*i32 = null;
+  nullChoice(vptr2);
+  nullChoice(vptr3);
+
 }
-
-
-
