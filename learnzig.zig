@@ -1,74 +1,52 @@
 const std = @import("std");
+const expect = @import("std").testing.expect; // works like assert in other langauges?
 
-const constant: i32 = 5;
-var variable: u32 = 500;
+const c: u32 = 5;
+var variable: u32 = 5000;
 
 const inferred_constant = @as(i32, 5);
 var inferred_variable = @as(u32, 5000);
 
-// Undefined can be coerced to any value
 const a: i32 = undefined;
-var b: u32 = undefined;
+const b: u32 = undefined;
 
-// Arrays
-const c = [5]u8{'h','e','l','l','o'};
-const d = [_]u8{'w','o','r','l','d'};
+const a1  = [5]u8{"h", "e", "l", "l","o"};
+const b2 = [_]u8{"w", "o", "r", "l", "d"};
+const length = a1.len;
 
-const array = [_]u8{'h','e','l','l','o'};
-const length = array.len;
-
-const expect = @import("std").testing.expect;
-
-test "If statement" {
-  const f = true;
+test "if states" {
+  const a3 = true;
   var x: u16 = 0;
-  if (f) {
+  if (a3) {
     x += 1;
   } else {
-    x += 2;
+    x += 12;
   }
-  try expect(x == 1);
-}
-
-test "if statement expression" {
-  const e = true;
-  var x: u16 = 0;
-  x += if (e) 1 else 2;
   try expect(x == 1);
 }
 
 test "while" {
   var i: u8 = 2;
   while(i < 100) {
-    i *= 2;
+    i*=2;
   }
   try expect(i == 128);
 }
 
-test "while with continue expression" {
+test "while w/ expr" {
   var sum: u8 = 0;
   var i: u8 = 1;
-  while (i <= 10) : (i += 1) {
+  while(i <= 10) : (i += 1) {
     sum += i;
   }
   try expect(sum == 55);
 }
 
-test "while with continue" {
+test "while w/ break" {
   var sum: u8 = 0;
   var i: u8 = 0;
-  while(i <= 3) : (i += 1) {
-    if (i == 2) continue;
-    sum += i;
-  }
-  try expect(sum == 4);
-}
-
-test "while with break" {
-  var sum: u8 = 0;
-  var i: u8 = 0;
-  while(i <= 3) : (i+=1) {
-    if (i == 2)  break;
+  while (i<=3) : (i+=1) {
+    if (i == 2) break;
     sum += i;
   }
   try expect(sum == 1);
@@ -76,7 +54,6 @@ test "while with break" {
 
 test "for" {
   const string = [_]u8{'a', 'b', 'c'};
-
   for (string) |character, index| {
     _ = character;
     _ = index;
@@ -86,19 +63,15 @@ test "for" {
     _ = character;
   }
 
-  for (string) |_, index| {
-    _ = index;
-  }
-
   for (string) |_| {}
 }
 
-// Fn = Immutable + camelCase
-// Variables = snake_case
+// variables = snake_case
+// functions = camelCase
+
 fn addFive(x: u32) u32 {
   return x + 5;
 }
-
 
 test "function" {
   const y = addFive(0);
@@ -106,24 +79,18 @@ test "function" {
   try expect(y == 5);
 }
 
-// Fns can be recursive
-fn fibonacci(n: u16) u16 {
-  if (n==0 or n==1) return n;
-  return fibonacci(n-1) + fibonacci(n-2);
+fn fib(n: u16) u16 {
+  if (n == 0 or n == 1) return n;
+  return fib(n-1) + fib(n-2);
 }
 
-test "Recursive functions" {
-  const x = fibonacci(10);
+test "fib func" {
+  const x = fib(10);
   try expect(x == 55);
 }
 
-test "Ignoring variables" {
-  _ = 10; // only allowed in local not global scope
-}
-
-// Defer = execute statements when exiting current block - reverse order of defers = order of executions
-test "Defer" {
-  var x: i16 = 5;
+test "defer" {
+  var x:i16 = 5;
   {
     defer x += 2;
     try expect(x == 5);
@@ -140,11 +107,10 @@ test "multi defer" {
   try expect(x == 4.5);
 }
 
-// Error = enums
 const FileOpenError = error {
-AccessDenied,
-OutOfMemory,
-FileNotFound,
+  AccessDenied,
+  OutOfMemory,
+  FileNotFound,
 };
 
 const AllocationError = error{OutOfMemory};
@@ -154,8 +120,7 @@ test "coerce error from subset to superset" {
   try expect(err == FileOpenError.OutOfMemory);
 }
 
-// Error unions
-test "Error unions" {
+test "Error Union" {
   const maybe_error: AllocationError!u16 = 10;
   const no_error = maybe_error catch 0;
 
@@ -167,7 +132,7 @@ fn failingFunction() error{Oops}!void {
   return error.Oops;
 }
 
-test "returning an error" {
+test "return error" {
   failingFunction() catch |err| {
     try expect(err == error.Oops);
     return;
@@ -178,79 +143,30 @@ fn failFn() error{Oops}!i32 {
   try failingFunction();
   return 12;
 }
-
-test "Try" {
+// try x == x catch |err| return err;
+test "try above" {
   var v = failFn() catch |err| {
     try expect(err == error.Oops);
     return;
   };
-  try expect(v == 12); // never reached
+  try expect(v==12);
 }
 
-// errdefer
+// Errdefer = defer but returns error from inside it's block 
 var problems: u32 = 98;
 fn failFnCounter() error{Oops}!void {
   errdefer problems += 1;
   try failingFunction();
 }
 
-test "ErrDefer" {
-  failFnCounter() catch |err| {
+test "errdefer" {
+  failingFunction() catch |err| {
     try expect(err == error.Oops);
     try expect(problems == 99);
     return;
   };
 }
 
-// Error unions can have errors sets inferred 
-fn createFile() !void {
-  return error.AccessDenied;
-}
-
-test "Inferred error set" {
-  const x: error{AccessDenied}!void = createFile();
-  _ = x catch {};
-}
-
-// Merge error sets
-test "Merging errors" {
-  const A = error{NotDir, PathNotFound};
-  const B = error{OutOfMemory, PathNotFound};
-  const C = A||B;
-  if C.OutOfMemory {
-    std.debug.print("Here");
-  } else if C.PathNotFound {
-    std.debug.print("Here");
-  } else if C.NotDir {
-    std.debug.print("here");
-  }
-}
-
-// Switch statements
-test "switches get bitches" {
-  var x: i8 = 10;
-  switch(x) {
-    -1...1 => {
-      x = -x;
-    },
-    10, 100 => {
-      x = @divExact(x, 10);
-    },
-    else => {},
-  }
-    try expect(x == 1);
-}
-
-test "Switch expression" {
-  var x: i8 = 10;
-  x = switch(x) {
-    -1...1 => -x,
-    10, 100 => @divExact(x, 10),
-    else => x,
-  };
-  try expect(x == 1);
-}
-
-pub fn main() void {
+pub fn main() !void {
   std.debug.print("Hello, {s}!\n", .{"World"});
 }
