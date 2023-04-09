@@ -20,6 +20,7 @@ pub fn main() !void {
 
 // We can read any arbitrary number type with number_type
 // can swap i32 for type below
+
 fn ask_user(comptime number_type: type) !number_type {
     const stdin = std.io.getStdIn().reader();
 

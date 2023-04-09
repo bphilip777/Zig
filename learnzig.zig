@@ -635,6 +635,199 @@ test "returning a type" {
   try expect(Matrix(f32, 4, 4) == [4][4]f32);
 }
 
+// has generic type
+fn addSmallInts(comptime T: type, a: T, b: T) T {
+  return switch (@typeInfo(T)) {
+    .ComptimeInt => a + b,
+    .Int => |info| if (info.bits <= 16)
+      a + b
+    else
+      @compileError("ints too large"),
+    else => @compileError("only ints accepted"),
+  };
+}
+
+test "typeinfo search" {
+  const x = addSmallInts(u16, 20, 30);
+  try expect(@TypeOf(x) == u16);
+  try expect(x == 50);
+}
+
+fn GetBiggerInt(comptime T: type) type {
+  return @Type(.{
+    .Int = .{
+      .bits = @typeInfo(T).Int.bits + 1,
+      .signedness = @typeInfo(T).Int.signedness,
+    },
+  });
+}
+
+test "@Type" {
+  try expect(GetBiggerInt(u8) == u9);
+  try expect(GetBiggerInt(i31) == i32);
+}
+
+// To return a struct use @This
+fn Vec(
+  comptime count: comptime_int,
+  comptime T: type,
+) type {
+  return struct {
+data: [count]T,
+    const Self = @This();
+
+    fn abs(self: Self) Self {
+      var tmp = Self{.data=undefined};
+      for (self.data) |elem, i| {
+        tmp.data[i] = if (elem < 0)
+          -elem
+        else 
+          elem;
+      }
+      return tmp;
+    }
+
+    // initialize struct
+    fn init(data: [count]T) Self {
+      return Self{.data=data};
+    }
+  };
+}
+
+const eql = @import("std").mem.eql;
+
+test "generic vector" {
+  const x = Vec(3, f32).init([_]f32{10, -10, 5});
+  const y = x.abs();
+  try expect(eql(f32, &y.data, &[_]f32{10,10,5}));
+}
+
+fn plusOne(x: anytype) @TypeOf(x) {
+  return x + 1;
+}
+
+test "inferred function param" {
+  try expect(plusOne(@as(u32, 1)) == 2);
+}
+
+test "++" {
+  const x: [4]u8 = undefined;
+  const y = x[0..];
+
+  const a: [6]u8 = undefined;
+  const b = a[0..];
+
+  const new = y ++ b; // repeats y b - only at comptime
+  try expect(new.len == 10);
+}
+
+test "**" {
+  const pattern = [_]u8{0xCC, 0xAA};
+  const memory = pattern ** 3;
+  try expect(eql(
+    u8,
+    &memory,
+    &[_]u8{0xCC, 0xAA, 0xCC, 0xAA, 0xCC, 0xAA}
+  ));
+}
+
+// Below is a series of payload captures
+test "optional-if" {
+  var maybe_num: ?usize = 10;
+  if (maybe_num) |n| {
+    try expect(@TypeOf(n) == usize);
+    try expect(n == 10);
+  } else {
+    unreachable;
+  }
+}
+
+test "error union if" {
+  var ent_num: error{UnknownEntity}!u32 = 5;
+  if (ent_num) |entity| {
+    try expect(@TypeOf(entity) == u32);
+    try expect(entity == 5);
+  } else |err| {
+    _ = err catch {};
+    unreachable;
+  }
+}
+
+test "while optional" {
+  var i: ?u32 = 10;
+  while(i) |num| : (i.? -= 1) {
+    try expect(@TypeOf(num) == u32);
+    if (num == 1) {
+      i = null;
+      break;
+    }
+  }
+  try expect(i == null);
+}
+
+var numbers_left2: u32 = undefined;
+
+fn eventuallyErrorSequence() !u32 {
+  return if (numbers_left2 == 0) error.ReachedZero else blk: {
+    numbers_left2 -= 1;
+    break :blk numbers_left2;
+  };
+}
+
+test "while error union capture" {
+  var sum: u32 = 0;
+  numbers_left2 = 3;
+  while(eventuallyErrorSequence()) |value| {
+    sum += value;
+  } else |err| {
+    try expect(err == error.ReachedZero);
+  }
+}
+
+test "for capture" {
+  const x = [_]i8{1,5,120,-5};
+  for (x) |v| try expect(@TypeOf(v) == i8);
+}
+
+const Info = union(enum) {
+  a: u32,
+  b: []const u8,
+  c,
+  d: u32,
+};
+
+test "switch capture" {
+  var b = Info{.a = 10};
+  const x = switch (b) {
+    .b => |str| blk: {
+      try expect(@TypeOf(str) == []const u8);
+      break :blk 1;
+    },
+    .c => 2,
+    .a, .d => |num| blk: {
+      try expect(@TypeOf(num) == u32);
+      break :blk num * 2;
+    },
+  };
+  try expect(x == 20);
+}
+
+test "for w/ ptr capture" {
+  var data = [_]u8{1,2,3};
+  for (data) |*byte| byte.* += 1;
+  try expect(eql(u8, &data, &[_]u8{2,3,4}));
+}
+
+// Inline loops are unrolled (speed boost) - while works similarly
+test "inline for" {
+  const types = [_]type{i32, f32, u8, bool};
+  var sum: usize = 0;
+  inline for (types) |T| sum += @sizeOf(T);
+  try expect(sum == 10);
+}
+
+
+
 pub fn main() !void {
   std.debug.print("Hello, {s}!\n", .{"World"});
 }
