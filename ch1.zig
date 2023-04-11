@@ -629,4 +629,401 @@ test "while null capture" {
   try expect(sum == 6);
 }
 
+// computed at compile time
+test "comptime blocks" {
+  var x = comptime fib(10);
+  _ = x;
 
+  var y = comptime blk: {
+    break :blk fib(10);
+  };
+  _ = y;
+}
+
+test "comptime int" {
+  const a = 12;
+  const b = a + 10;
+
+  const c: u4 = a;
+  _ = c;
+  const d: f32 = b;
+  _ = d;
+}
+
+test "branching on types" {
+  const a = 5;
+  const b: if(a < 10) f32 else i32 = 5;
+  _ = b;
+}
+
+
+fn matrix(
+  comptime T: type,
+comptime width: comptime_int,
+comptime height: comptime_int,
+) type {
+  return [height][width]T;
+}
+
+test "return a type" {
+  try expect(matrix(f32, 4, 4) == [4][4]f32);
+}
+
+fn addSmallInts(comptime T: type, a: T, b: T) T {
+  return switch(@typeInfo(T)) {
+    .ComptimeInt => a + b,
+    .Int => |info| if (info.bits <= 16)
+      a + b
+    else
+      @compileError("Ints too large"),
+    else => @compileError("Only ints accepted"),
+  };
+}
+
+test "typeinfo switch" {
+  const x = addSmallInts(u16, 20, 30);
+  try expect(@TypeOf(x) == u16);
+  try expect(x == 50);
+}
+
+fn GetBiggerInt(comptime T: type) type {
+  return @Type(.{
+    .Int = .{
+      .bits = @typeInfo(T).Int.bits + 1,
+      .signedness = @typeInfo(T).Int.signedness,
+    },
+  });
+}
+
+test "@Type" {
+  try expect(GetBiggerInt(u8) == u9);
+  try expect(GetBiggerInt(i31) == i32);
+}
+
+// return struct = generic data struct in zig = use @This 
+// std.mem.eql = compares 2 slices 
+fn Vec(
+comptime count: comptime_int,
+comptime T: type,
+) type {
+  return struct {
+    data: [count]T,
+  
+    const Self = @This();
+
+    fn abs(self: Self) Self {
+      var tmp = Self{.data=undefined};
+      for (self.data) |elem, i| {
+        tmp.data[i] = if (elem < 0)
+          -elem
+        else 
+          elem;
+      }
+      return tmp;
+    }
+
+    fn init(data: [count]T) Self {
+      return Self{.data = data};
+    }
+  };
+}
+
+const eql = std.mem.eql;
+test "gen vec" {
+  const x = Vec(3, f32).init([_]f32{10, -10, 5});
+  const y = x.abs();
+  try expect(eql(f32, &y.data, &[_]f32{10, 10, 5}));
+}
+
+// What's difference b/w anytype and T
+fn plusOne(x: anytype) @TypeOf(x) {
+  return x + 1;
+}
+
+// below does not work w/ T, anytype is its own thing
+// type does not work at compile time only run time 
+// anytype works at compile time
+fn plusTwo(x: anytype) @TypeOf(x) {
+  return x + 2;
+}
+
+test "inferred fn param" {
+  try expect(plusOne(@as(u32, 1)) == 2);
+  var x: i32 = 2;
+  try expect(plusTwo(x) == 4);
+}
+
+// concat arrays quickly = cool stuff
+test "++" {
+  const x: [4]u8 = undefined;
+  const y = x[0..];
+  const a: [6]u8 = undefined;
+  const b = a[0..];
+  const new = y ++ b;
+  try expect(new.len == 10);
+}
+
+test "**" {
+  const pattern = [_]u8{0xCC, 0xAA};
+  const memory = pattern ** 3;
+  try expect(eql(
+    u8,
+    &memory,
+    &[_]u8{0xCC, 0xAA, 0xCC, 0xAA, 0xCC, 0xAA}
+  ));
+}
+
+test "opt ifs" {
+  var maybe_num: ?usize = 10;
+  if (maybe_num) |n| {
+    try expect(@TypeOf(n) == usize);
+    try expect(n == 10);
+  } else {
+    unreachable;
+  }
+}
+
+test "error union if" {
+  var ent_num: error{UnknownEntity}!u32 = 5;
+  if (ent_num) |entity| {
+    try expect(@TypeOf(entity) == u32);
+    try expect(entity == 5);
+  } else |err| {
+    _ = err catch {};
+    unreachable;
+  }
+}
+
+test "while opt" {
+  var i: ?u32 = 10;
+  while(i) |num| : (i.? -= 1) {
+    try expect(@TypeOf(num) == u32);
+    if (num == 1) {
+      i = null;
+      break;
+    }
+  }
+  try expect(i == null);
+}
+
+var numbers_left2: u32 = undefined;
+fn eventuallyErrorSequence() !u32 {
+  return if (numbers_left2 == 0) error.ReachedZero else blk: {
+    numbers_left2 -= 1;
+    break :blk numbers_left2;
+  };
+}
+
+test "while error union capture" {
+  var sum: u32 = 0;
+  numbers_left2 = 3;
+  while (eventuallyErrorSequence()) |value| {
+    sum += value;
+  } else |err| {
+    try expect(err == error.ReachedZero);
+  }
+}
+
+test "for capture" {
+  const x = [_]i8{1,5,120, -5};
+  for (x) |v| try expect(@TypeOf(v) == i8);
+}
+
+// switch cases on tagged unions 
+const Info = union(enum) {
+  a: u32,
+  b: []const u8,
+  c,
+  d: u32,
+};
+
+test "switch capture" {
+  var b = Info{.a=10};
+  const x = switch(b) {
+    .b => |str| blk: {
+      try expect(@TypeOf(str) == []const u8);
+      break :blk 1;
+    },
+    .c => 2,
+    .a, .d => |num| blk: { // can have multiple matches on same line if separated by ,
+      try expect(@TypeOf(num) == u32);
+      break :blk num*2;
+    },
+  };
+  try expect(x == 20);
+}
+
+test "for w/ ptr capture" {
+  var data = [_]u8{1,2,3};
+  for (data) |*byte| byte.* +=1;
+  try expect(eql(u8, &data, &[_]u8{2,3,4}));
+}
+
+// Inline
+test "inline for" {
+  const types = [_]type{i32, f32, u8, bool};
+  var sum: usize = 0;
+  inline for (types) |T| sum += @sizeOf(T);
+  try expect(sum == 10);
+}
+
+// maintain type safety for pts whose types we don't yet know about
+// const Window = opaque{};
+// const Button = opaque{};
+//
+// extern fn show_window(*Window) callconv(.C) void;
+//
+// test "opaque" {
+//   var main_window: *Window = undefined;
+//   show_window(main_window);
+//   
+//   // Bleow will fail
+//   // var ok_btn: *Button = undefined;
+//   // show_window(ok_btn);
+// }
+
+// const Window2 = opaque {
+//   fn show(self: *Window2) void {
+//     show_window2(self);
+//   }
+// };
+//
+// extern fn show_window2(*Window2) callconv(.C) void;
+//
+// test "opaque with declarations" {
+//   var main_window: *Window2 = undefined;
+//   main_window.show();
+// }
+
+// can coerce to other struct types
+test "anonymous struct literal" {
+  // Is this the anonymous part?
+  const Point = struct{x:i32, y:i32};
+  var pt: Point = .{
+    .x = 13,
+    .y = 64,
+  };
+  try expect(pt.x == 13);
+  try expect(pt.y == 64);
+}
+
+// never coerced to another type
+test "fully anonymous struct" {
+  try dump(.{
+    .int = @as(u32, 1234),
+    .float = @as(f64, 12.34),
+    .b = true,
+    .s = "hi",
+  });
+}
+
+fn dump(args: anytype) !void {
+  try expect(args.int == 1234);
+  try expect(args.float == 12.34);
+  try expect(args.b);
+  try expect(args.s[0] == 'h');
+  try expect(args.s[1] == 'i');
+}
+
+// anonymous struct w/o field names = tuples
+test "tuple" {
+  const values = .{
+    @as(u32, 1234),
+    @as(f64, 12.34),
+    true,
+    "hi",
+  } ++ .{false} ** 2;
+  try expect(values[0] == 1234);
+  try expect(values[4] == false);
+  inline for(values) |v,i| {
+    if (i!=2) continue;
+    try expect(v);
+  }
+  try expect(values.len == 6);
+  try expect(values.@"3"[0] == 'h'); // what is going on here?
+  // @"" acts as excape, anything inside is an identifier
+}
+
+test "sentinel termination" {
+  const terminated = [3:0]u8{3,2,1};
+  try expect(terminated.len == 3);
+  // try expect(@bitCast([4]u8, terminated)[3] == 0); // idk why this fails
+}
+
+test "string literal" {
+  try expect(@TypeOf("hello") == *const [5:0]u8);
+}
+
+test "C String" {
+  const c_string: [*:0]const u8 = "hello";
+  var array: [5]u8 = undefined;
+
+  var i: usize = 0;
+  while(c_string[i] != 0) : (i+=1) {
+    array[i] = c_string[i];
+  }
+}
+
+// sentinel termination types coerce to non-sentinal counterparts
+test "coercion" {
+  var a: [*:0]u8 = undefined;
+  const b: [*]u8 = a;
+  _ = b;
+
+  var c: [5:0]u8 = undefined;
+  const d: [5]u8 = c;
+  _ = d;
+
+  var e: [:10]f32 = undefined;
+  const f = e;
+  _ = f;
+}
+
+test "sentinel terminated slicing" {
+  var x = [_:0]u8{255} ** 3;
+  const y = x[0..3:0];
+  _ = y;
+}
+
+// Vectors for SIMD
+const meta = std.meta;
+const Vector = meta.Vector;
+
+test "vector add" {
+  const x: Vector(4, f32) = .{1,-10,20,-1};
+  const y: Vector(4, f32) = .{2, 10, 0, 1};
+  const z = x + y;
+  try expect(meta.eql(z, Vector(4, f32){3, 0, 20, 0}));
+}
+
+test "vector indexing" {
+  const x: Vector(4, u8) = .{255, 0, 255, 0};
+  try expect(x[0] == 255);
+}
+
+test "vector * scalar" {
+  const x: Vector(3, f32) = .{12.5, 37.5, 2.5};
+  const y = x * @splat(3, @as(f32, 2)); // used to create a vector of same values
+  try expect(meta.eql(y, Vector(3, f32){25, 75, 5}));
+}
+
+const mlen = std.mem.len;
+
+test "vector looping" {
+  const x = Vector(4, u8){255, 0, 255, 0};
+  var sum = blk: {
+    var tmp: u10 = 0;
+    var i: u8 = 0;
+    while (i<mlen(x)) : (i+=1) tmp += x[i];
+    break :blk tmp;
+  };
+  try expect(sum == 510);
+}
+
+test "vector coercion" {
+  const arr: [4]f32 = @Vector(4, f32){1,2,3,4};
+  try expect(@TypeOf(arr[0]) == f32);
+}
+
+// @import = takes file - creates struct - declarated labeleed pub end up in struct for use 
+// std is special case, rest are file path 
