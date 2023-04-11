@@ -826,6 +826,93 @@ test "inline for" {
   try expect(sum == 10);
 }
 
+// Opaque = unknown non-zero size + alignment - maintain type safety w/ ptrs 
+const Window = opaque {};
+const Button = opaque {};
+
+extern fn show_window(*Window) callconv(.C) void;
+
+test "opaque" {
+  var main_window: *Window = undefined;
+  show_window(main_window);
+  
+  // Below will break b/c not type Button
+  var ok_btn: *Button = undefined;
+  // show_window(ok_btn);
+  _ = ok_btn;
+}
+
+// const Window2 = opaque {
+//   fn show(self: *Window2) void {
+//     show_window_2(self);
+//   }
+// };
+//
+// extern fn show_window_2(*Window2) callconv(.C) void;
+//
+// test "opaque with declarations" {
+//   var main_window: *Window2 = undefined;
+//   main_window.show();
+// }
+
+// Anonymous structs 
+// can be coerced to other types
+test "Anonymous struct literal" {
+  const Point = struct {x:i32, y:i32};
+  var pt: Point = .{
+    .x = 13,
+    .y = 67,
+  };
+  try expect(pt.x == 13);
+  try expect(pt.y == 67);
+}
+
+// Complete Anonymous
+test "fully anonymous struct" {
+  try dum(.{
+    .int = @as(u32, 1234),
+    .float = @as(f64, 12.34),
+    .b = true,
+    .s = "hi",
+  });
+}
+
+fn dum(args: anytype) !void {
+  try expect(args.int == 1234);
+  try expect(args.float == 12.34);
+  try expect(args.b);
+  try expect(args.s[0] == 'h');
+  try expect(args.s[1] == 'i'); // diff b/w "" and '', strings = "", chars = ''
+}
+
+// Anonymous structs w/ field names = tuples
+test "tuple" {
+  const values = .{
+    @as(u32, 1234)
+  };
+
+  _ = values;
+}
+
+test "sentinel termination" {
+  const terminated = [3:0]u8{3,2,1};
+  try expect(terminated.len == 3);
+  try expect(@bitCast([4]u8, terminated)[3] == 0);
+}
+
+test "string literal" {
+  try expect(@TypeOf("hello") == *const [5:0]u8);
+}
+
+test "C String" {
+  const c_string: [*:0]const u8 = "hello";
+  var array: [5]u8 = undefined;
+
+  var i: usize = 0;
+  while (c_string[i] != 0) : (i += 1) {
+    array[i] = c_string[i];
+  }
+}
 
 
 pub fn main() !void {
